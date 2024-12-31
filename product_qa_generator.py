@@ -16,20 +16,22 @@ class ProductQAGenerator:
         device = torch.device('mps' if torch.backends.mps.is_available() else 'cpu')
         
         # Load models with appropriate dtype and device
+        print("Loading Flan-T5-large model for better question generation...")
         self.question_model = T5ForConditionalGeneration.from_pretrained(
-            't5-base',
-            torch_dtype=torch.float32,  # Use float32 for better compatibility
+            'google/flan-t5-large',
+            torch_dtype=torch.float32,
             device_map=device
         ).to(device)
         
         # Initialize tokenizer with explicit parameters
         self.question_tokenizer = T5Tokenizer.from_pretrained(
-            't5-base',
-            model_max_length=1024,  # Explicitly set max length
-            legacy=True  # Explicitly set legacy mode
+            'google/flan-t5-large',
+            model_max_length=1024,
+            legacy=True
         )
         
         # Initialize summarizer for reviews
+        print("Loading BART model for review summarization...")
         self.summarizer = pipeline(
             "summarization",
             model="facebook/bart-large-cnn",
@@ -40,41 +42,57 @@ class ProductQAGenerator:
         self.device = device
         self.question_model.to(self.device)
 
-    def generate_questions(self, context, num_questions=3):
+    def generate_questions(self, context, num_questions=3, context_type="product"):
         """Generate questions from given context."""
-        # Prepare input text with better prompt
-        input_text = f"generate {num_questions} questions about this product: {context}"
-        
-        # Tokenize input with explicit max_length
-        inputs = self.question_tokenizer.encode(
-            input_text,
-            return_tensors="pt",
-            max_length=1024,
-            truncation=True,
-            padding='max_length'
-        ).to(self.device)
-        
-        # Generate questions with sampling enabled
-        outputs = self.question_model.generate(
-            inputs,
-            max_length=128,
-            num_return_sequences=num_questions,
-            do_sample=True,
-            temperature=0.8,
-            top_k=50,
-            top_p=0.95,
-            no_repeat_ngram_size=2
-        )
+        # Prepare input text with better prompts based on context type
+        prompts = {
+            "product": [
+                f"Given this product description: {context}\n\nGenerate a specific question about the main features of this product.",
+                f"Based on this product information: {context}\n\nAsk a question about how this product can be used.",
+                f"From this product details: {context}\n\nCreate a question about what makes this product unique."
+            ],
+            "review": [
+                f"Based on these customer reviews: {context}\n\nGenerate a question about customer satisfaction and experience with this product."
+            ]
+        }
         
         questions = []
-        for output in outputs:
-            question = self.question_tokenizer.decode(output, skip_special_tokens=True)
+        current_prompts = prompts.get(context_type, prompts["product"])
+        
+        # Generate one question per prompt
+        for prompt in current_prompts[:num_questions]:
+            # Tokenize input with explicit max_length
+            inputs = self.question_tokenizer.encode(
+                prompt,
+                return_tensors="pt",
+                max_length=1024,
+                truncation=True,
+                padding='max_length'
+            ).to(self.device)
+            
+            # Generate question with sampling enabled
+            outputs = self.question_model.generate(
+                inputs,
+                max_length=64,
+                num_return_sequences=1,
+                do_sample=True,
+                temperature=0.7,
+                top_k=50,
+                top_p=0.95,
+                no_repeat_ngram_size=2
+            )
+            
+            question = self.question_tokenizer.decode(outputs[0], skip_special_tokens=True)
+            
             # Clean up the generated question
             question = question.strip()
             if not question.endswith('?'):
                 question += '?'
             if question.lower().startswith('question:'):
                 question = question[9:].strip()
+            if question.lower().startswith('answer:'):
+                continue  # Skip if it generated an answer instead of a question
+                
             questions.append(question)
             
         return questions
@@ -129,8 +147,14 @@ class ProductQAGenerator:
     def process_product(self, product_data):
         """Process a single product and generate questions and review summary."""
         results = {
-            'title': product_data['title'],
-            'feature_questions': [],
+            'id': product_data['id'],
+            'sku': product_data['sku'],
+            'name': product_data['name'],
+            'commodity_type': product_data['commodity_type'],
+            'products(product-questions-template):question-1': '',
+            'products(product-questions-template):question-2': '',
+            'products(product-questions-template):question-3': '',
+            'feature_questions': [],  # Changed from 'questions' to match main function
             'review_questions': [],
             'review_summary': None
         }
@@ -139,16 +163,23 @@ class ProductQAGenerator:
         product_context = ""
         if pd.notna(product_data.get('description')):
             product_context += product_data['description'] + " "
-        if pd.notna(product_data.get('features')):
-            product_context += product_data['features']
+        # if pd.notna(product_data.get('features')):
+        #     product_context += product_data['features']
         
         # Generate feature-based questions if we have context
         if product_context.strip():
+            print(f"Product context: {product_context}")
             feature_questions = self.generate_questions(
                 product_context,
-                num_questions=3
+                num_questions=3,
+                context_type="product"
             )
-            results['feature_questions'] = feature_questions
+            # Safely assign questions only if they exist
+            if feature_questions:
+                results['products(product-questions-template):question-1'] = feature_questions[0] if len(feature_questions) > 0 else ''
+                results['products(product-questions-template):question-2'] = feature_questions[1] if len(feature_questions) > 1 else ''
+                results['products(product-questions-template):question-3'] = feature_questions[2] if len(feature_questions) > 2 else ''
+                results['feature_questions'] = feature_questions
         
         # Generate review-based questions and summary
         if pd.notna(product_data.get('reviews')):
@@ -157,7 +188,8 @@ class ProductQAGenerator:
             if reviews_text.strip():
                 review_questions = self.generate_questions(
                     reviews_text,
-                    num_questions=1
+                    num_questions=1,
+                    context_type="review"
                 )
                 results['review_questions'] = review_questions
                 
@@ -167,13 +199,24 @@ class ProductQAGenerator:
         return results
 
 def main():
+    # Get product name from command line arguments
+    import sys
+    if len(sys.argv) != 2:
+        print("Usage: python product_qa_generator.py <file_name.csv>")
+        print("Example: python product_qa_generator.py store_data.csv")
+        sys.exit(1)
+        
+    file_name = sys.argv[1].lower().replace(" ", "_")
+    input_file = f"{file_name}"
+    output_file = f"{file_name}_generated_qa.csv"
+    
     # Initialize the generator
     generator = ProductQAGenerator()
     
     # Load product data
     try:
-        df = pd.read_csv('product_data.csv')
-        print(f"Loaded {len(df)} products")
+        df = pd.read_csv(input_file)
+        print(f"Loaded {len(df)} products from {input_file}")
         
         # Process each product
         results = []
@@ -185,14 +228,15 @@ def main():
         output_df = pd.DataFrame(results)
         
         # Convert questions to string format for better CSV readability
-        output_df['feature_questions'] = output_df['feature_questions'].apply(lambda x: '\n'.join(x) if x else '')
-        output_df['review_questions'] = output_df['review_questions'].apply(lambda x: '\n'.join(x) if x else '')
+        # output_df['feature_questions'] = output_df['feature_questions'].apply(lambda x: '\n'.join(x) if isinstance(x, list) else '')
+        # output_df['review_questions'] = output_df['review_questions'].apply(lambda x: '\n'.join(x) if isinstance(x, list) else '')
         
-        output_df.to_csv('generated_qa.csv', index=False)
-        print("Successfully generated questions and saved results to generated_qa.csv")
+        output_df.to_csv(output_file, index=False)
+        print(f"Successfully generated questions and saved results to {output_file}")
         
     except FileNotFoundError:
-        print("Please ensure product_data.csv exists in the current directory")
+        print(f"Error: Could not find {input_file}")
+        print(f"Please ensure {input_file} exists in the current directory")
     except Exception as e:
         print(f"An error occurred: {str(e)}")
 

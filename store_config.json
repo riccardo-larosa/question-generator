@@ -1,0 +1,16 @@
+{
+    "stores": {
+        "adidas": {
+            "url": "https://www.amazon.com/stores/adidas/page/5E398A61-45C7-46F9-A6C6-5B4797CC5063",
+            "type": "amazon_store"
+        },
+        "nike": {
+            "url": "https://www.amazon.com/stores/Nike/page/8C24BF66-4713-4BA6-9115-C27BD9E2F1B2",
+            "type": "amazon_store"
+        },
+        "puma": {
+            "url": "https://www.amazon.com/stores/PUMA/page/AAF8B366-9F07-4E16-8592-B7BAB5C21C7C",
+            "type": "amazon_store"
+        }
+    }
+} 

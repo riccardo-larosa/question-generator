@@ -7,6 +7,8 @@ from bs4 import BeautifulSoup
 import pandas as pd
 import time
 import random
+import sys
+import os
 
 class AmazonScraper:
     def __init__(self):
@@ -162,11 +164,38 @@ class AmazonScraper:
         self.driver.quit()
 
 def main():
-    store_url = "https://www.amazon.com/stores/adidas/page/5E398A61-45C7-46F9-A6C6-5B4797CC5063"
+    # Get product name from command line arguments
+    if len(sys.argv) != 2:
+        print("Usage: python amazon_scraper.py <product_name>")
+        print("Example: python amazon_scraper.py adidas")
+        sys.exit(1)
+        
+    product_name = sys.argv[1].lower().replace(" ", "_")
+    output_file = f"{product_name}_data.csv"
+    
+    # Store URL mapping (add more as needed)
+    store_urls = {
+        "adidas": "https://www.amazon.com/stores/adidas/page/5E398A61-45C7-46F9-A6C6-5B4797CC5063",
+        # Add more store URLs here
+    }
+    
+    if product_name not in store_urls:
+        print(f"Error: No store URL found for {product_name}")
+        print("Available products:", ", ".join(store_urls.keys()))
+        sys.exit(1)
+    
+    store_url = store_urls[product_name]
     
     try:
         scraper = AmazonScraper()
+        print(f"Starting to scrape {product_name} products...")
         scraper.scrape_store(store_url)
+        
+        # Rename the output file to match the product name
+        if os.path.exists('product_data.csv'):
+            os.rename('product_data.csv', output_file)
+            print(f"Saved scraped data to {output_file}")
+            
     except Exception as e:
         print(f"An error occurred: {str(e)}")
     finally:
