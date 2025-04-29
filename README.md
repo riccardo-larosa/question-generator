@@ -1,93 +1,59 @@
-# Product Question Generator
+# Product QA Generator
 
-This Python application generates relevant questions and summarizes reviews for product data. It uses pre-trained transformer models to generate questions about product features, usage context, and customer feedback.
+This script uses AI models to automatically generate relevant questions and summarize reviews for products listed in a CSV file. It utilizes state-of-the-art language models to create insightful questions based on product descriptions and customer feedback.
 
 ## Features
 
-- Scrapes product data from various online stores (Amazon, Shopify, etc.)
-- Generates 2-4 contextual questions per product about:
-  - Product features
-  - Usage context
-  - Customer feedback
-- Summarizes customer reviews
-- Saves results in CSV format
-- Configurable store settings via JSON
+*   Generates up to 3 feature-based questions from product descriptions.
+*   Generates 1 question based on customer reviews.
+*   Summarizes customer reviews using a summarization model.
+*   Processes products from a CSV file.
+*   Outputs results to a new CSV file.
+*   Supports GPU acceleration on Apple Silicon (MPS) if available, otherwise uses CPU.
+
+## Models Used
+
+*   **Question Generation:** `google/flan-t5-large`
+*   **Review Summarization:** `facebook/bart-large-cnn`
 
 ## Requirements
 
-- Python 3.8+
-- Chrome browser (for web scraping)
-- ChromeDriver (for Selenium)
+*   Python 3.x
+*   Libraries: `pandas`, `transformers`, `torch`, `nltk`, `tqdm`
+*   NLTK data: `punkt` tokenizer
 
-## Installation
+## Setup
 
-1. Clone this repository
-2. Create virtual environment:
+1.  **Clone the repository (if applicable):**
+   ```bash
+   # git clone <repository_url>
+   # cd <repository_directory>
+   ```
+
+2.  **Install dependencies:**
+   It's recommended to use a virtual environment.
    ```bash
    python -m venv venv
-   source venv/bin/activate
-   pip install -r requirements.txt
-   pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
+   source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+   pip install pandas torch transformers nltk tqdm
    ```
-3. Install ChromeDriver for your Chrome version:
-   - Download from: https://sites.google.com/chromium.org/driver/
-   - Add it to your system PATH
-   ```bash
-   export PATH="$PATH:/<directory>/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS"
-   ```
+   *Note: Ensure you have the correct PyTorch version installed for your system (CPU/GPU/MPS). Refer to the [official PyTorch installation guide](https://pytorch.org/get-started/locally/).*
 
-To add a new store:
-1. Add its configuration to `store_config.json`
-2. Ensure the store type is supported in `web_scraper.py`
+3.  **Download NLTK data:**
+   The script automatically attempts to download the necessary `punkt` data package on first run. If this fails, you can run the following in a Python interpreter:
+   ```python
+   import nltk
+   nltk.download('punkt')
+   ```
 
 ## Usage
 
-1. First, scrape product data:
-   ```bash
-   python web_scraper.py <store_name>
-   ```
-   Example:
-   ```bash
-   python web_scraper.py adidas
-   ```
-   This will create `<store_name>_data.csv` (e.g., `adidas_data.csv`)
+Run the script from your terminal, providing the path to your input CSV file as a command-line argument:
 
-2. Generate questions and summaries:
-   ```bash
-   python product_qa_generator.py <file_name>
-   ```
-   Example:
-   ```bash
-   python product_qa_generator.py adidas
-   ```
-   This will create `<file_name>_generated_qa.csv` (e.g., `adidas_generated_qa.csv`)
+```bash
+python product_qa_generator.py <your_product_data.csv>
+```
 
-## Currently Supported Store Types
-
-- `amazon_store`: Amazon brand stores
-- `amazon_search`: Amazon search results
-- `shopify`: Shopify stores
-- More coming soon...
-
-## Currently Available Stores
-
-- adidas (Amazon Store)
-- nike (Amazon Store)
-- puma (Amazon Store)
-- More can be added via `store_config.json`
-
-## Output Format
-
-The generated CSV file will contain:
-- Product title
-- Feature questions (2-3 questions about product features and usage)
-- Review questions (1 question about customer experience)
-- Review summary (when available)
-
-## Notes
-
-- The application uses rate limiting and delays to avoid being blocked by stores
-- The number of products scraped is limited to 50 by default
-- The application requires an active internet connection
-- Some products may not have all information available
-- Respect the terms of service and robots.txt of the websites you scrape
+For example:
+```bash
+python product_qa_generator.py store_data.csv
